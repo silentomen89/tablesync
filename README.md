@@ -1,3 +1,13 @@
+# Quick Description
+
+- This script utilizes Percona's `pt-table-sync` to sync data between databases/tables.
+- The script will break up a table and sync it in increments to help avoid `deadlocks`.
+- The script detects the primary key on the table given, determines the start/end points, and then syncs it in sections.
+  - By default it'll do 200000 entries at a time (can be changed via `-C value`).
+- I wrote this while live migrating a client with over 2 billion rows to a new database cluster.
+- I kept getting deadlocks because the replication threads were updating the tables and killing the `pt-table-sync`.
+- I worked around this by breaking up the tables into sections and syncing it that way, which is what this script does.
+
 # Much better docs to come
 
 - Here is the current help menu for the script:
