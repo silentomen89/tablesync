@@ -1,0 +1,870 @@
+#!/bin/bash
+#
+# Easy Table Sync Script
+# David Andrews <andrews-d@hotmail.com>
+# Version 2.1.1
+
+################# Main Variables #################
+readonly RE='^[0-9]+$'
+MYSQLBIN="$(which mysql)"
+SYNCBIN="$(which pt-table-sync)"
+SRCPORT=3306
+DESTPORT=3306
+INC=200000
+CHUNKSIZE=5000
+LOCK=0
+##################################################
+
+###################### Help ######################
+help(){
+  echo -e "\nHere are the available options:"
+  echo -e " -h \t\t\t(-h) Displays the help output."
+  echo -e " -d SRCDB \t\t(-d) Controls the source database to sync from."
+  echo -e " -D DESTDB \t\t(-D) Controls the destination database to sync to."
+  echo -e "\t\t\t\tIf the src/dest databases are the same name, \
+\n\t\t\t\t  specify '-d' or '-D' (one or the other).\n\t\t\t\tThe script \
+will set both to be the same when \n\t\t\t\t  only one option is specified.\
+\n\t\t\t\tSetting both won't cause any issues."
+  echo -e " -t SRCTBL \t\t(-t) Controls the source table to sync from."
+  echo -e " -T DESTTBL \t\t(-T) Controls the destination table to sync to."
+  echo -e "\t\t\t\tIf the src/dest tables are the same name, \n\t\t\t\t  \
+specify '-t' or '-T' (one or the other).\n\t\t\t\tThe script will set both \
+to be the same when \n\t\t\t\t  only one option is specified.\
+\n\t\t\t\tSetting both won't cause any issues."
+  echo -e " -t ALL or -T ALL \t(-t/-T) 'ALL' has special meaning within this \
+script. \n\t\t\t\tIf you specify 'ALL' for the table, then \n\t\t\t\t  the \
+script will loop through and sync \n\t\t\t\t  every table within the \
+specified database."
+  echo -e " -p \t\t\t(-p) Prompts for the source MySQL password (for the user \
+specified)."
+  echo -e " -P \t\t\t(-P) Prompts for the destination MySQL password (for the \
+user specified)."
+  echo -e "\t\t\t\tIf source and destination passwords are the same, \
+\n\t\t\t\t  just call '-p' or '-P' (one or the other). \n\t\t\t\t  It'll set \
+both passwords to be the same by \n\t\t\t\t  default unless you call both."
+  echo -e " -f /full/path/to/file \t(-f) Sets the source MySQL password from \
+the file provided."
+  echo -e " -F /full/path/to/file \t(-F) Sets destination MySQL password from \
+the file provided."
+  echo -e "\t\t\t\tFiles should be in '.my.cnf' format, ie \
+'password=PASS'.\n\t\t\t\tIf source/destination passwords are the same, \
+\n\t\t\t\t  just call '-f' or '-F' once. \n\t\t\t\t  It'll set both passwords \
+to be the same by \n\t\t\t\t  default unless you call both. \n\t\t\t\tOptions \
+'-p' and '-f' are mutually exclusive, as are \n\t\t\t\t  '-P' and '-F'. \
+However, you can mix them, ie \n\t\t\t\t  '-p' with '-F' or vice versa."
+  echo -e " -u SRCUSER \t\t(-u) Sets the source MySQL user \
+(default: $(printenv USER))."
+  echo -e " -U DESTUSER \t\t(-U) Sets the destination MySQL user \
+(default: $(printenv USER))."
+  echo -e "\t\t\t\tIf both source/dest users are the same, call just \
+\n\t\t\t\t  '-u' or '-U' as it'll set both to be the same."
+  echo -e " -i SRCIP \t\t(-i) Controls source IP/Hostname to sync from \
+(default: localhost)."
+  echo -e " -I DESTIP \t\t(-I) Controls destination IP/Hostname to sync to."
+  echo -e " -o SRCPORT \t\t(-o) Changes source MySQL port \
+(default: ${SRCPORT})."
+  echo -e " -O DESTPORT \t\t(-O) Changes destination MySQL port \
+(default: ${DESTPORT})."
+  echo -e " -c CHUNKSIZE \t\t(-c) Controls value of '--chunk-size' \
+(default: ${CHUNKSIZE})."
+  echo -e " -C INCREMENT \t\t(-C) Controls how many rows per sync group \
+(default: ${INC})."
+  echo -e " -l LOCK \t\t(-l) Controls value of '--lock' (default: ${LOCK})."
+  echo -e " -b /mysql/binary/path \t(-b) Path to a specific MySQL binary \
+(default: ${MYSQLBIN})."
+  echo -e " -B /pt/table/sync \t(-B) Path to a specific 'pt-table-sync' \
+binary (default: ${SYNCBIN})."
+  echo -e " -e START \t\t(-e) Controls the start value of the sync (in regards \
+to the primary key column)."
+  echo -e " -E END \t\t(-E) Controls the end point of the sync (in regards to \
+the primary key column)."
+  echo -e " -z \t\t\t(-z) Executes the 'pt-table-sync' with '--dry-run' for \
+testing first."
+  echo -e " -Z \t\t\t(-Z) Executes the 'debug' function which prints out \
+variable data."
+}
+##################################################
+
+#################### Sync All ####################
+sync_all(){
+  for tables in $(${MYSQLBIN} -h ${SRCIP} -u ${SRCUSER} -P ${SRCPORT} \
+-p${SRCPASS} ${SRCDB} -Nse "SHOW TABLES;") ; do
+
+    # determining how many primary keys the table has.
+    pkeycount=$(${MYSQLBIN} -h ${SRCIP} -u ${SRCUSER} -P ${SRCPORT} \
+-p${SRCPASS} ${SRCDB} -Nse "SHOW KEYS from ${tables} where key_name='PRIMARY'"\
+ 2>/dev/null | awk '{print $5}' | wc -l)
+
+    # determine the primary key column
+    column=$(${MYSQLBIN} -h ${SRCIP} -u ${SRCUSER} -P ${SRCPORT} \
+-p${SRCPASS} ${SRCDB} -Nse "SHOW KEYS from ${tables} where key_name='PRIMARY'"\
+ 2>/dev/null | awk '{print $5}')
+
+    # if there are no primary keys, or if there are 2+, enter here
+    if [[ -z ${column} || ${pkeycount} -ge 2 ]]; then
+      # if --dry-run is enabled (-z)
+      if [[ "${OPTIONz}" -eq 1 ]]; then
+        ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+
+      # else execute with --execute
+      else
+        ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+      fi
+
+    # else, if there is just one primary key, and column is configured
+    else
+      # initializing variables
+      x=0
+      y=0
+      startval=0
+      end=0
+
+      # pulling start/end values from the primary key column from current table
+      startval=$(${MYSQLBIN} -h ${SRCIP} -u ${SRCUSER} -P ${SRCPORT} \
+-p${SRCPASS} ${SRCDB} -Nse "select ${column} from ${tables} order by \
+${column} asc limit 1")
+      end=$(${MYSQLBIN} -h ${SRCIP} -u ${SRCUSER} -P ${SRCPORT} \
+-p${SRCPASS} ${SRCDB} -Nse "select ${column} from ${tables} order by \
+${column} desc limit 1")
+
+      #  setting x/y for incrementing through the table
+      x=${startval}
+      y=$((${startval}+${INC}))
+
+      # if the primary key is not all numbers, enter here
+      # we can't increment on non-integers, so it just does full sync
+      if ! [[ "${startval}" =~ "${RE}" ]]; then
+        # if --dry-run is enabled (-z)
+        if [[ "${OPTIONz}" -eq 1 ]]; then
+          ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+
+        # else execute with --execute
+        else
+        ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+        fi
+
+      # enters here when there is just one primary key, and it's an integer.
+      else
+        while [[ ${x} -lt ${end} ]]; do
+          echo -e "\nSyncing ${SRCDB}.${tables} to ${DESTDB}.${tables} via \
+column '${column}' from ${x} through ${y}"
+
+          # Enters here if dry-run is enabled
+          if [[ "${OPTIONz}" -eq 1 ]]; then
+            ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
+h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+
+          # executes with --execute when no --dry-run is set.
+          else
+            ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
+h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+          fi
+
+          # incrementing for the next pass-through     
+          x=$((x+${INC}))
+          y=$((y+${INC}))
+        done
+      fi
+    fi
+  done
+}
+##################################################
+
+############## Sync Specific Tables ##############
+sync_specific(){
+  # determining how many primary keys the table has.
+  pkeycount=$(${MYSQLBIN} -h ${SRCIP} -u ${SRCUSER} -P ${SRCPORT} \
+-p${SRCPASS} ${SRCDB} -Nse "SHOW KEYS from ${SRCTBL} where \
+key_name='PRIMARY'" 2>/dev/null | awk '{print $5}' | wc -l)
+
+  # determine the primary key column
+  column=$(${MYSQLBIN} -h ${SRCIP} -u ${SRCUSER} -P ${SRCPORT} \
+-p${SRCPASS} ${SRCDB} -Nse "SHOW KEYS from ${SRCTBL} where \
+key_name='PRIMARY'" 2>/dev/null | awk '{print $5}')
+
+  # if there are no primary keys, or if there are 2+, enter here
+  if [[ -z ${column} || ${pkeycount} -ge 2 ]]; then
+    # if --dry-run is enabled (-z)
+    if [[ "${OPTIONz}" -eq 1 ]]; then
+      ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+
+    # else execute with --execute
+    else
+      ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+    fi
+
+  else
+    # initializing variables
+    x=0
+    y=0
+    startval=0
+    end=0
+
+    # pulling start/end values from the primary key column from current table
+    startval=$(${MYSQLBIN} -h ${SRCIP} -u ${SRCUSER} -P ${SRCPORT} \
+-p${SRCPASS} ${SRCDB} -Nse "select ${column} from ${SRCTBL} order by \
+${column} asc limit 1")
+    end=$(${MYSQLBIN} -h ${SRCIP} -u ${SRCUSER} -P ${SRCPORT} \
+-p${SRCPASS} ${SRCDB} -Nse "select ${column} from ${SRCTBL} order by \
+${column} desc limit 1")
+
+    # if a specific start value (-e) is given, sets it here
+    if [[ "${OPTIONe}" -eq 1 ]]; then
+      x="${START}"
+      y=$((${START}+${INC}))
+    else 
+      x="${startval}"
+      y=$((${startval}+${INC}))
+    fi
+
+    # enters here if a specific end value is given (-E).
+    if [[ "${OPTIONE}" -eq 1 ]]; then
+      end="${END}"
+    fi
+
+    # Checks the value of the primary key to ensure it's an integer.
+    # If it's not an integer, it'll enter here.
+    # We can't increment non-integers, so it'll just do a full sync.
+    if ! [[ ${startval} =~ ${RE} ]]; then
+      # if --dry-run is enabled (-z)
+      if [[ "${OPTIONz}" -eq 1 ]]; then
+        ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+
+      # else execute with --execute
+      else
+        ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+      fi
+
+    # Enters here when there is just the one primary key, and the values
+    # are integers.
+    else
+      while [[ ${x} -le ${end} ]]; do
+        echo -e "\nSyncing ${SRCDB}.${SRCTBL} to ${DESTDB}.${DESTTBL} via \
+column '${column}' from ${x} through ${y}"
+
+        # Enters here if dry-run is enabled
+        if [[ "${OPTIONz}" -eq 1 ]]; then
+          ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
+h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+
+        # executes with --execute when no --dry-run is set.
+        else
+          ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
+h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
+D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
+P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+        fi
+
+        # incrementing for the next pass-through
+        x=$((x+${INC}))
+        y=$((y+${INC}))
+      done
+    fi
+  fi
+}
+##################################################
+
+################ Check Passwords #################
+check_passwords(){
+  # If the password is empty, try to pull from "~/.my.cnf"
+  if [[ -z "${SRCPASS}" ]]; then
+    # Check to see if "~/.my.cnf" exists and is readable.
+    if ! [[ -r "$(printenv HOME)/.my.cnf" ]]; then
+      echo -e "\nNo password was provided, a file containing the password was \
+not provided, and '$(printenv HOME)/.my.cnf' doesn't exist, or isn't readable."
+      echo -e "\nUnable to proceed with a password to connect with."
+      exit 1
+    fi
+
+    readonly SRCPASS=$(egrep "^password" "$(printenv HOME)/.my.cnf" \
+| cut -d "=" -f 2 \
+| cut -d '"' -f 2)
+
+  # Ensuring the passwords are set as global and read-only
+  else
+    declare -g -r SRCPASS
+  fi
+
+  # If the password is empty, try to pull from "~/.my.cnf"
+  if [[ -z "${DESTPASS}" ]]; then
+    # Check to see if "~/.my.cnf" exists and is readable.
+    if ! [[ -r "$(printenv HOME)/.my.cnf" ]]; then
+      echo -e "\nNo password was provided, a file containing the password was \
+not provided, and '$(printenv HOME)/.my.cnf' doesn't exist, or isn't readable."
+      echo -e "\nUnable to proceed with a password to connect with."
+      exit 1
+    fi
+
+    readonly DESTPASS=$(egrep "^password" "$(printenv HOME)/.my.cnf" \
+| cut -d "=" -f 2 \
+| cut -d '"' -f 2)
+
+  # Ensuring the passwords are set as global and read-only
+  else
+    declare -g -r DESTPASS
+  fi
+}
+##################################################
+
+##################### Debug ######################
+debug(){
+  echo -e "\nSRCDB: ${SRCDB}, SRCTBL: ${SRCTBL}"
+  echo "DESTDB: ${DESTDB}, DESTTBL: ${DESTTBL}"
+  echo "SRCPASS: ${SRCPASS}, DESTPASS: ${DESTPASS}"
+  echo "SRCUSER: ${SRCUSER}, DESTUSER: ${DESTUSER}"
+  echo "SRCIP: ${SRCIP}, DESTIP: ${DESTIP}"
+  echo "SRCPORT: ${SRCPORT}, DESTPORT: ${DESTPORT}"
+  echo "MySQL Binary: ${MYSQLBIN}"
+  echo "'pt-table-sync' binary: ${SYNCBIN}"
+  echo "Chunk Size: ${CHUNKSIZE}"
+  echo "LOCK: ${LOCK}"
+  echo "INC: ${INC}"
+  echo "Start: ${START}, End: ${END}"
+}
+##################################################
+
+###################### Main ######################
+main(){
+  while getopts ":hd:D:t:T:pPf:F:u:U:i:I:o:O:c:C:l:b:B:e:E:zZ" opt; do
+    case "${opt}" in
+      # Setting the source database name.
+      d)
+        if [[ -z "${OPTIONd}" ]]; then
+          OPTIONd=1
+          SRCDB="${OPTARG}"
+
+          # Sets destination database to be the same if it's currently empty.
+          # If it isn't empty, then it was already set by option '-D' which
+          # we don't want to overwrite.
+          if [[ -z "${DESTDB}" ]]; then
+            DESTDB="${OPTARG}"
+          fi
+        else
+          echo "Option -d has already been specified. You cannot specify this \
+option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # Setting the destination database name.
+      D)
+        if [[ -z "${OPTIOND}" ]]; then
+          OPTIOND=1
+          DESTDB="${OPTARG}"
+
+          # Sets source database to be the same if it's currently empty.
+          # If it isn't empty, then it was already set by option '-d' which
+          # we don't want to overwrite.
+          if [[ -z "${SRCDB}" ]]; then
+            SRCDB="${OPTARG}"
+          fi
+        else
+          echo "Option -D has already been specified. You cannot specify this \
+option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # Setting up the source table name.
+      t)
+        if [[ -z "${OPTIONt}" ]]; then
+          OPTIONt=1
+          SRCTBL="${OPTARG}"
+
+          # Sets destination table to be the same if it's currently empty.
+          # If it isn't empty, then it was already set by option '-T' which
+          # we don't want to overwrite.
+          if [[ -z "${DESTTBL}" ]]; then
+            DESTTBL="${OPTARG}"
+          fi
+
+          # Enters here if 'ALL' has been specified.          
+          if [[ "${OPTARG}" = "ALL" || "${ALLTBLS}" -eq 1 ]]; then
+            ALLTBLS=1
+
+            # Overwrites both to 'ALL'
+            DESTTBL="ALL"
+            SRCTBL="ALL"
+          fi
+        else
+          echo "Option -t has already been specified. You cannot specify this \
+option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # Setting up the destination table name.
+      T)
+        if [[ -z "${OPTIONT}" ]]; then
+          OPTIONT=1
+          DESTTBL="${OPTARG}"
+
+          # Sets source table to be the same if it's currently empty.
+          # If it isn't empty, then it was already set by option '-t' which
+          # we don't want to overwrite.
+          if [[ -z "${SRCTBL}" ]]; then
+            SRCTBL="${OPTARG}"
+          fi
+
+          # Enters here if 'ALL' has been specified.
+          if [[ "${OPTARG}" = "ALL" || "${ALLTBLS}" -eq 1 ]]; then
+            ALLTBLS=1
+
+            # Overwrites both to 'ALL'
+            DESTTBL="ALL"
+            SRCTBL="ALL"
+          fi
+        else
+          echo "Option -T has already been specified. You cannot specify this \
+option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # Setting source MySQL password from hidden prompt.
+      p)
+        if [[ -z "${OPTIONp}" && -z "${OPTIONf}" ]]; then
+          # Option -f is another way to provide the local password.
+          # Only need the password one way, password prompt or file.
+          OPTIONp=1
+          OPTIONf=1
+
+          echo -e "\nPlease provide the source MySQL password now:"
+          read -s -p "`echo $'> '`" SRCPASS
+
+          # Setting destination password to match if it's empty currently.
+          # Most of the time the source/dest pass is the same.
+          # If '-P' or '-F' is called, it'll just overwite this anyway.
+          if [[ -z "${DESTPASS}" ]]; then
+            DESTPASS="${SRCPASS}"
+          fi
+
+        else
+          echo "Option -p or option -f has already been specified. You cannot \
+specify these options multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # Setting destination MySQL password from hidden prompt.
+      P)
+        if [[ -z "${OPTIONP}" && -z "${OPTIONF}" ]]; then
+          # Option -F is another way to provide the destination password.
+          # Only need the password one way, password prompt or file.
+          OPTIONP=1
+          OPTIONF=1
+
+          echo -e "\nPlease provide the destination MySQL password now:"
+          read -s -p "`echo $'> '`" DESTPASS
+
+          # Setting source password to match if it's empty currently.
+          # Most of the time the source/dest pass is the same.
+          # If '-p' or '-f' is called, it'll just overwite this anyway.
+          if [[ -z "${SRCPASS}" ]]; then
+            SRCPASS="${DESTPASS}"
+          fi
+
+        else
+          echo "Option -P or option -F has already been specified. You cannot \
+specify these options multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # Setting source MySQL password from the file provided.
+      f)
+        if [[ -z "${OPTIONf}" && -z "${OPTIONp}" ]]; then
+          # Option -p is another way to provide the local password.
+          # Only need the password one way, password prompt or file.
+          OPTIONf=1
+          OPTIONp=1
+
+          SRCPASS=$(egrep "^password" "${OPTARG}" \
+| cut -d "=" -f 2 \
+| cut -d '"' -f 2)
+
+          # Setting destination password to match if it's empty currently.
+          # Most of the time the source/dest pass is the same.
+          # If '-P' or '-F' is called, it'll just overwite this anyway.
+          if [[ -z "${DESTPASS}" ]]; then
+            DESTPASS="${SRCPASS}"
+          fi
+
+        else
+          echo "Option -f or option -p has already been specified. You cannot \
+specify these options multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # Setting destination MySQL password from the file provided.
+      F)
+        if [[ -z "${OPTIONF}" && -z "${OPTIONP}" ]]; then
+          # Option -P is another way to provide the local password.
+          # Only need the password one way, password prompt or file.
+          OPTIONF=1
+          OPTIONP=1
+
+          DESTPASS=$(egrep "^password" "${OPTARG}" \
+| cut -d "=" -f 2 \
+| cut -d '"' -f 2)
+
+          # Setting source password to match if it's empty currently.
+          # Most of the time the source/dest pass is the same.
+          # If '-f' or '-p' is called, it'll just overwite this anyway.
+          if [[ -z "${SRCPASS}" ]]; then
+            SRCPASS="${DESTPASS}"
+          fi
+
+        else
+          echo "Option -F or option -P has already been specified. You cannot \
+specify these options multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # sets up the source MySQL user (defaults to current user)
+      # sets both to be the same initially. 
+      u)
+        if [[ -z "${OPTIONu}" ]]; then
+          OPTIONu=1
+          SRCUSER="${OPTARG}"
+
+          # sets dest MySQL user if it's empty.
+          if [[ -z "${DESTUSER}" ]]; then
+            DESTUSER="${OPTARG}"
+          fi
+        else
+          echo "Option -u has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # sets the destination MySQL user.
+      U)
+        if [[ -z "${OPTIONU}" ]]; then
+          OPTIONU=1
+          DESTUSER="${OPTARG}"
+
+          # sets the source MySQL user if it's currently empty.
+          if [[ -z "${SRCUSER}" ]]; then
+            SRCUSER="${OPTARG}"
+          fi
+        else
+          echo "Option -U has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # sets the source IP or hostname
+      i)
+        if [[ -z "${OPTIONi}" ]]; then
+          OPTIONi=1
+          SRCIP="${OPTARG}"
+        else
+          echo "Option -i has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # sets the destination IP or hostname
+      I)
+        if [[ -z "${OPTIONI}" ]]; then
+          OPTIONI=1
+          DESTIP="${OPTARG}"
+        else
+          echo "Option -I has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # sets the source MySQL port (default is 3306)
+      o)
+        if [[ -z "${OPTIONo}" ]]; then
+          OPTIONo=1
+          SRCPORT="${OPTARG}"
+        else
+          echo "Option -o has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # sets the destination MySQL port (default is 3306)
+      O)
+        if [[ -z "${OPTIONO}" ]]; then
+          OPTIONO=1
+          DESTPORT="${OPTARG}"
+        else
+          echo "Option -O has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # Controls '--chunk-size' which is a 'pt-table-sync' variable.
+      c)
+        if [[ -z "${OPTIONc}" ]]; then
+          OPTIONc=1
+          CHUNKSIZE="${OPTARG}"
+        else
+          echo "Option -c has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # controls the increment value
+      # this is the value I increment by when breaking up a table
+      C)
+        if [[ -z "${OPTIONC}" ]]; then
+          OPTIONC=1
+          INC="${OPTARG}"
+        else
+          echo "Option -C has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # controls the '--lock' value which is a 'pt-table-sync' variable
+      l)
+        if [[ -z "${OPTIONl}" ]]; then
+          OPTIONl=1
+          LOCK="${OPTARG}"
+        else
+          echo "Option -l has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # controls the path to the MySQL binary in case you have a special
+      # installation, or it differs from what's in PATH.
+      b)
+        if [[ -z "${OPTIONb}" ]]; then
+          OPTIONb=1
+          MYSQLBIN="${OPTARG}"
+        else
+          echo "Option -b has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # controls the path to the 'pt-table-sync' binary in case there is
+      # a special location for it.
+      B)
+        if [[ -z "${OPTIONB}" ]]; then
+          OPTIONB=1
+          SYNCBIN="${OPTARG}"
+        else
+          echo "Option -B has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # controls the value to start at when syncing a specific table
+      e)
+        if [[ -z "${OPTIONe}" ]]; then
+          OPTIONe=1
+          START="${OPTARG}"
+        else
+          echo "Option -e has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # controls the value to end at when syncing a specific table
+      E)
+        if [[ -z "${OPTIONE}" ]]; then
+          OPTIONE=1
+          END="${OPTARG}"
+        else
+          echo "Option -E has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # executes 'pt-table-sync' with '--dry-run' to test it first.
+      z)
+        if [[ -z "${OPTIONz}" ]]; then
+          OPTIONz=1
+        else
+          echo "Option -z has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # executes the 'debug' function which prints out the values of all
+      # of the variables, tests them, and exits.
+      Z)
+        if [[ -z "${OPTIONZ}" ]]; then
+          OPTIONZ=1
+        else
+          echo "Option -Z has already been specified. You cannot \
+specify this option multiple times."
+          ERRORDETECT=1
+        fi
+        ;;
+
+      # help
+      h)
+        help
+        exit 1 
+        ;;
+
+      \?)
+        echo "Invalid option : -${OPTARG}"
+        ERRORDETECT=1
+        ;;
+
+      :)
+        echo "Option -${OPTARG} requires an argument."
+        ERRORDETECT=1
+        ;;
+    esac
+  done
+
+  # if an error was detecting while going through the 'getopts' loop
+  # then the script will print the 'help' function and exit.
+  if [[ "${ERRORDETECT}" -eq 1 ]]; then
+    help
+    exit 1
+  fi
+
+  # Function will check if the src/dest passwords are still empty.
+  # If they are, it tries to extract a password from '~/.my.cnf'.
+  # If it still can't find a password, it'll fail and exit.
+  check_passwords
+
+  # Defaulting to current user if no user specified.
+  if [[ -z "${SRCUSER}" ]]; then
+    SRCUSER="$(printenv USER)"
+  fi
+
+  # Defaulting to current user if no user specified.
+  if [[ -z "${DESTUSER}" ]]; then
+    DESTUSER="$(printenv USER)"
+  fi
+
+  # If no source IP, default to 'localhost'
+  if [[ -z "${SRCIP}" ]]; then
+    SRCIP="localhost"
+  fi
+
+  # debug prints out the values of all the variables.
+  if [[ "${OPTIONZ}" -eq 1 ]]; then
+    debug
+  fi
+
+  # Checks to see if a src/dest database was defined.
+  # If not, the script will exit as it can't sync w/o a database.
+  if [[ -z "${SRCDB}" || -z "${DESTDB}" ]]; then
+    echo -e "\nNo src/dest database specified. \nPlease specify the \
+database(s) to sync via '-d' and/or '-D'. \nIf you need help, specify '-h'."
+    exit 1
+  fi
+
+  # Checks to see if the table has been defined (including 'ALL').
+  # If no tables are specified, the script will exit.
+  if [[ -z "${SRCTBL}" || -z "${DESTTBL}" ]]; then
+    echo -e "\nNo src/dest table specified. \nPlease specify the \
+table(s) to sync via '-t' and/or '-T'. \nIf you want to sync all tables, use \
+'-t ALL' or '-T ALL'. \nIf you need further help, specify '-h'."
+    exit 1
+  fi
+
+  # If no dest IP specified, script will fail.
+  if [[ -z "${DESTIP}" ]]; then
+    echo -e "\nNo destination IP or Hostname was specified.\nThe script will \
+not know where to sync to without this being defined.\nPlease specify the \
+destination IP or Hostname via the '-I' option."
+    exit 1
+  fi
+
+  # Unable to proceed if there is no local MySQL binary.
+  if ! [[ -x "${MYSQLBIN}" ]]; then
+    echo -e "\nThe current server doesn't appear to have an executable MySQL \
+binary, or it's not within the current 'PATH'.\nPlease specify the path to \
+the MySQL binary with '-b /path/to/mysql/binary'."
+    exit 1
+  fi
+
+  # Checking to see if the MySQL binary is to a 'dbsake' sandbox binary.
+  # If so, it'll update the variable to end with 'sandbox.sh mysql' so
+  # that the script is compatible with a 'dbsake' sandbox for the source.
+  if [[ "${MYSQLBIN}" == *"sandbox.sh"* ]]; then
+    MYSQLBIN="$(echo ${MYSQLBIN}) mysql"
+  fi
+
+  # Unable to proceed if there is no local pt-table-sync binary
+  if ! [[ -x "${SYNCBIN}" ]]; then
+    echo -e "\nThe current server doesn't appear to have an executable \
+'pt-table-sync' binary, or it's not within the current 'PATH'.\nPlease specify \
+the path to the 'pt-table-sync' binary with '-B /path/to/pt-table-sync'.\n\
+If not installed, it's part of Percona's 'percona-toolkit' package, which you \
+can download from their site."
+    exit 1
+  fi
+
+  # if debug was specified, exit now before it executes the actual syncs
+  if [[ "${OPTIONZ}" -eq 1 ]]; then
+    echo -e "\nDebug complete. Exiting."
+    exit 1
+
+  # calls 'sync_all' if ALL tables is specified
+  elif [[ "${ALLTBLS}" -eq 1 ]]; then
+    echo -e "Syncing all tables associated with ${SRCDB} to ${DESTDB}."
+    sync_all
+
+  # otherwise syncs the specific table
+  else
+    sync_specific
+  fi
+}  
+##################################################
+
+main "$@"
