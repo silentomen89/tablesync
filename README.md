@@ -73,6 +73,40 @@ Here are the available options:
 
 ### Debug
 - Run **-Z** to print out debugging variable information and make sure you have all the necessary variables.
+- Example Output:
+
+```bash
+./tablesync -d fakedb -t faketbl -pP -i 127.0.0.1 -I 192.168.0.1 -o 3310 -e 0 -E 10000 -Z
+
+Please provide the source MySQL password now:
+>
+Please provide the destination MySQL password now:
+>
+Source Database:         fakedb
+Source Table:            faketbl
+Source Password:         fakesourcepass
+Source User:             root
+Source IP:               127.0.0.1
+Source Port:             3310
+
+Destination Database:    fakedb
+Destination Table:       faketbl
+Destination Password:    fakedestpass
+Destination User:        root
+Destination IP:          192.168.0.1
+Destination Port:        3306
+
+MySQL Binary:            /usr/bin/mysql
+'pt-table-sync' Binary:  /usr/bin/pt-table-sync
+
+Chunk Size:              5000
+'--lock' value:          0
+Increment value:         200000
+Start value:             0
+End value:               10000
+
+Debug complete. Exiting.
+```
 
 # Dbsake Compatibility
 
