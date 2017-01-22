@@ -1,14 +1,14 @@
-# Quick Description
+# Description
 
-- This script utilizes Percona's **pt-table-sync** to sync data between databases/tables.
-- The script will break up a table and sync it in increments to help avoid **deadlocks**.
+- This script is a wrapper for Percona's [**pt-table-sync**](https://www.percona.com/doc/percona-toolkit/2.2/pt-table-sync.html) to sync data between databases/tables.
+  - **pt-table-sync** is part of [Percona Toolkit](https://www.percona.com/doc/percona-toolkit/).
+- I wrote this to assist with live migrating a client whose various tables contained over 2 billion rows to a new database cluster.
+- The problem I was encountering was I kept getting **deadlocks** and the replication threads kept killing my **pt-table-sync** command when the replication thread applied a commit that modified the table currently syncing.
+- The script will automatically break up the table being synced (if possible) and then sync it over in increments to drastically reduce the chance of **deadlocks**.
 - The script detects the primary key on the table given, determines the start/end points, and then syncs it in sections.
   - By default it'll do 200000 entries at a time (can be changed via **-C value**).
-- I wrote this while live migrating a client with over 2 billion rows to a new database cluster.
-- I kept getting deadlocks because the replication threads were updating the tables and killing the **pt-table-sync**.
-- I worked around this by breaking up the tables into sections and syncing it that way, which is what this script does.
 
-# Much better docs to come
+# Initial Usage (more coming soon)
 
 - Here is the current help menu for the script:
 
@@ -67,10 +67,19 @@ Here are the available options:
  -z                     (-z) Executes the 'pt-table-sync' with '--dry-run' for testing first.
  -Z                     (-Z) Executes the 'debug' function which prints out variable data.
 ```
-- Script is compatible with **dbsake** sandbox instance for the source.
-  - Just specify the full path to the **sandbox.sh** and the script will update it to **`/full/path/sandbox.sh mysql`**.
-  - It's not compatible with socket connections yet, so you need to get the Sandbox instance listening on a port.
-    - Uncomment **`port =`** and **`skip-networking`** should suffice.
-  - You also have to specify **127.0.0.1** instead of **localhost** if it's a local **dbsake** sandbox instance.
+
+### Test Run
 - Run the script with **-z** if you want to execute the **pt-table-sync** command with **`--dry-run`** to test first.
+
+### Debug
 - Run **-Z** to print out debugging variable information and make sure you have all the necessary variables.
+
+# Dbsake Compatibility
+
+- The script is compatible with a [**dbsake** sandbox instance](https://github.com/abg/dbsake) for the source.
+- You would specify the MySQL binary as the full path to the **sandbox.sh** (via **-b** option)
+  - The script will update the MySQL binary path to **`/full/path/sandbox.sh mysql`**.
+- I haven't added the ability to connect via sockets yet, so you need to get the Sandbox instance listening on a port.
+  - Within the **my.sandbox.cnf** you would uncomment **`port =`** and set it to an available port.
+  - Also need to comment out **`skip-networking`**, then restart the sandbox instance.
+- From there, you should be able to connect over **127.0.0.1** (not **localhost**, assuming it's a local instance) and the port configured.
