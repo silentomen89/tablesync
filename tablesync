@@ -361,18 +361,25 @@ not provided, and '$(printenv HOME)/.my.cnf' doesn't exist, or isn't readable."
 
 ##################### Debug ######################
 debug(){
-  echo -e "\nSRCDB: ${SRCDB}, SRCTBL: ${SRCTBL}"
-  echo "DESTDB: ${DESTDB}, DESTTBL: ${DESTTBL}"
-  echo "SRCPASS: ${SRCPASS}, DESTPASS: ${DESTPASS}"
-  echo "SRCUSER: ${SRCUSER}, DESTUSER: ${DESTUSER}"
-  echo "SRCIP: ${SRCIP}, DESTIP: ${DESTIP}"
-  echo "SRCPORT: ${SRCPORT}, DESTPORT: ${DESTPORT}"
-  echo "MySQL Binary: ${MYSQLBIN}"
-  echo "'pt-table-sync' binary: ${SYNCBIN}"
-  echo "Chunk Size: ${CHUNKSIZE}"
-  echo "LOCK: ${LOCK}"
-  echo "INC: ${INC}"
-  echo "Start: ${START}, End: ${END}"
+  echo -e "\nSource Database:\t ${SRCDB}\n\
+Source Table:\t\t ${SRCTBL}\n\
+Source Password:\t ${SRCPASS}\n\
+Source User:\t\t ${SRCUSER}\n\
+Source IP:\t\t ${SRCIP}\n\
+Source Port:\t\t ${SRCPORT}"
+  echo -e "\nDestination Database:\t ${DESTDB}\n\
+Destination Table:\t ${DESTTBL}\n\
+Destination Password:\t ${DESTPASS}\n\
+Destination User:\t ${DESTUSER}\n\
+Destination IP:\t\t ${DESTIP}\n\
+Destination Port:\t ${DESTPORT}"
+  echo -e "\nMySQL Binary:\t\t ${MYSQLBIN}"
+  echo -e "'pt-table-sync' Binary:\t ${SYNCBIN}"
+  echo -e "\nChunk Size:\t\t ${CHUNKSIZE}"
+  echo -e "'--lock' value:\t\t ${LOCK}"
+  echo -e "Increment value:\t ${INC}"
+  echo -e "Start value:\t\t ${START}\n\
+End value:\t\t ${END}"
 }
 ##################################################
 
