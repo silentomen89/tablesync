@@ -104,17 +104,21 @@ sync_all(){
     if [[ -z ${column} || ${pkeycount} -ge 2 ]]; then
       # if --dry-run is enabled (-z)
       if [[ "${OPTIONz}" -eq 1 ]]; then
-        ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+        echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" \
+h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
+--ask-pass
 
       # else execute with --execute
       else
-        ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+        echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" \
+h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
+--ask-pass
       fi
 
     # else, if there is just one primary key, and column is configured
@@ -142,17 +146,21 @@ ${column} desc limit 1")
       if ! [[ "${startval}" =~ "${RE}" ]]; then
         # if --dry-run is enabled (-z)
         if [[ "${OPTIONz}" -eq 1 ]]; then
-          ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+          echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" \
+h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
+--ask-pass
 
         # else execute with --execute
         else
-        ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+        echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" \
+h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
+--ask-pass
         fi
 
       # enters here when there is just one primary key, and it's an integer.
@@ -163,19 +171,21 @@ column '${column}' from ${x} through ${y}"
 
           # Enters here if dry-run is enabled
           if [[ "${OPTIONz}" -eq 1 ]]; then
-            ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+            echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
 --lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
-h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
+--ask-pass
 
           # executes with --execute when no --dry-run is set.
           else
-            ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+            echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
 --lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
-h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${tables}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${tables}"
+h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
+--ask-pass
           fi
 
           # incrementing for the next pass-through     
@@ -204,17 +214,21 @@ key_name='PRIMARY'" 2>/dev/null | awk '{print $5}')
   if [[ -z ${column} || ${pkeycount} -ge 2 ]]; then
     # if --dry-run is enabled (-z)
     if [[ "${OPTIONz}" -eq 1 ]]; then
-      ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+      echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" \
+h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
+--ask-pass
 
     # else execute with --execute
     else
-      ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+      echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" \
+h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
+--ask-pass
     fi
 
   else
@@ -252,17 +266,20 @@ ${column} desc limit 1")
     if ! [[ ${startval} =~ ${RE} ]]; then
       # if --dry-run is enabled (-z)
       if [[ "${OPTIONz}" -eq 1 ]]; then
-        ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+        echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" \
+h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
+--ask-pass
 
       # else execute with --execute
       else
-        ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+        echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
+--ask-pass
       fi
 
     # Enters here when there is just the one primary key, and the values
@@ -274,19 +291,21 @@ column '${column}' from ${x} through ${y}"
 
         # Enters here if dry-run is enabled
         if [[ "${OPTIONz}" -eq 1 ]]; then
-          ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+          echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
 --lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
-h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
+--ask-pass
 
         # executes with --execute when no --dry-run is set.
         else
-          ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+          echo "${SRCPASS}
+${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
 --lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
-h="${SRCIP}",u="${SRCUSER}",p="${SRCPASS}",P="${SRCPORT}",\
-D="${SRCDB}",t="${SRCTBL}" h="${DESTIP}",u="${DESTUSER}",p="${DESTPASS}",\
-P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}"
+h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
+h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
+--ask-pass
         fi
 
         # incrementing for the next pass-through
