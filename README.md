@@ -57,6 +57,8 @@ Here are the available options:
  -I DESTIP              (-I) Controls destination IP/Hostname to sync to.
  -o SRCPORT             (-o) Changes source MySQL port (default: 3306).
  -O DESTPORT            (-O) Changes destination MySQL port (default: 3306).
+ -s /path/to/socket     (-s) Source MySQL Socket to connect through (default: /var/lib/mysql/mysql.sock).
+ -S /path/to/socket     (-S) Destination MySQL Socket to connect through (only works if destination MySQL instance is local).
  -c CHUNKSIZE           (-c) Controls value of '--chunk-size' (default: 5000).
  -C INCREMENT           (-C) Controls how many rows per sync group (default: 200000).
  -l LOCK                (-l) Controls value of '--lock' (default: 0).
@@ -76,7 +78,7 @@ Here are the available options:
 - Example Output:
 
 ```bash
-./tablesync -d fakedb -t faketbl -pP -i 127.0.0.1 -I 192.168.0.1 -o 3310 -e 0 -E 10000 -Z
+./tablesync -d fakedb -t faketbl -pP -i 127.0.0.1 -S /var/lib/mysql/mysql.sock -o 3310 -e 0 -E 10000 -Z
 
 Please provide the source MySQL password now:
 >
@@ -93,8 +95,7 @@ Destination Database:    fakedb
 Destination Table:       faketbl
 Destination Password:    fakedestpass
 Destination User:        root
-Destination IP:          192.168.0.1
-Destination Port:        3306
+Destination Socket:      /var/lib/mysql/mysql.sock
 
 MySQL Binary:            /usr/bin/mysql
 'pt-table-sync' Binary:  /usr/bin/pt-table-sync
@@ -113,7 +114,8 @@ Debug complete. Exiting.
 - The script is compatible with a [**dbsake** sandbox instance](https://github.com/abg/dbsake) for the source.
 - You would specify the MySQL binary as the full path to the **sandbox.sh** (via **-b** option)
   - The script will update the MySQL binary path to **`/full/path/sandbox.sh mysql`**.
-- I haven't added the ability to connect via sockets yet, so you need to get the Sandbox instance listening on a port.
+- Specify the path to the socket within the **data** directory to connect via the socket (which works by default).
+- If you want to connect over IP+Port, there a few configuration changes that must be made:
   - Within the **my.sandbox.cnf** you would uncomment **`port =`** and set it to an available port.
   - Also need to comment out **`skip-networking`**, then restart the sandbox instance.
-- From there, you should be able to connect over **127.0.0.1** (not **localhost**, assuming it's a local instance) and the port configured.
+  - From there, you should be able to connect over **127.0.0.1** (not **localhost**, assuming it's a local instance) and the port configured.
