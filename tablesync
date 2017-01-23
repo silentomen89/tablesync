@@ -2,7 +2,7 @@
 #
 # Easy Table Sync Script
 # David Andrews <andrews-d@hotmail.com>
-# Version 2.1.1
+# Version 2.2.1
 
 ################# Main Variables #################
 readonly RE='^[0-9]+$'
@@ -102,24 +102,16 @@ sync_all(){
 
     # if there are no primary keys, or if there are 2+, enter here
     if [[ -z ${column} || ${pkeycount} -ge 2 ]]; then
-      # if --dry-run is enabled (-z)
-      if [[ "${OPTIONz}" -eq 1 ]]; then
-        echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" \
+      # configuring the full command
+      sync=(${SYNCPREFIX[@]} \
 h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
 h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
---ask-pass
+--ask-pass)
 
-      # else execute with --execute
-      else
-        echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" \
-h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
-h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
---ask-pass
-      fi
+      # executing full command with passwords piped in
+      echo "${SRCPASS}
+${DESTPASS}" | "${sync[@]}"
+      unset sync
 
     # else, if there is just one primary key, and column is configured
     else
@@ -143,25 +135,17 @@ ${column} desc limit 1")
 
       # if the primary key is not all numbers, enter here
       # we can't increment on non-integers, so it just does full sync
-      if ! [[ "${startval}" =~ "${RE}" ]]; then
-        # if --dry-run is enabled (-z)
-        if [[ "${OPTIONz}" -eq 1 ]]; then
-          echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" \
+      if ! [[ ${startval} =~ ${RE} ]]; then
+        # configuring the full command
+        sync=(${SYNCPREFIX[@]} \
 h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
 h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
---ask-pass
+--ask-pass)
 
-        # else execute with --execute
-        else
+        # executing full command with passwords piped in
         echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" \
-h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
-h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
---ask-pass
-        fi
+${DESTPASS}" | "${sync[@]}"
+        unset sync
 
       # enters here when there is just one primary key, and it's an integer.
       else
@@ -169,24 +153,17 @@ h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
           echo -e "\nSyncing ${SRCDB}.${tables} to ${DESTDB}.${tables} via \
 column '${column}' from ${x} through ${y}"
 
-          # Enters here if dry-run is enabled
-          if [[ "${OPTIONz}" -eq 1 ]]; then
-            echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
+          # configuring the full command
+          sync=(${SYNCPREFIX[@]} \
+--where "${column} >= ${x} AND ${column} <= ${y}" \
 h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
 h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
---ask-pass
+--ask-pass)
 
-          # executes with --execute when no --dry-run is set.
-          else
-            echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
-h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${tables}" \
-h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${tables}" \
---ask-pass
-          fi
+          # executing full command with passwords piped in
+          echo "${SRCPASS}
+${DESTPASS}" | "${sync[@]}"
+          unset sync
 
           # incrementing for the next pass-through     
           x=$((x+${INC}))
@@ -212,25 +189,18 @@ key_name='PRIMARY'" 2>/dev/null | awk '{print $5}')
 
   # if there are no primary keys, or if there are 2+, enter here
   if [[ -z ${column} || ${pkeycount} -ge 2 ]]; then
-    # if --dry-run is enabled (-z)
-    if [[ "${OPTIONz}" -eq 1 ]]; then
-      echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" \
+    # configuring the full command
+    sync=(${SYNCPREFIX[@]} \
 h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
 h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
---ask-pass
+--ask-pass)
 
-    # else execute with --execute
-    else
-      echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" \
-h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
-h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
---ask-pass
-    fi
+    # executing full command with passwords piped in
+    echo "${SRCPASS}
+${DESTPASS}" | "${sync[@]}"
+    unset sync
 
+  # Enters here when there is just one primary key detected.
   else
     # initializing variables
     x=0
@@ -264,23 +234,16 @@ ${column} desc limit 1")
     # If it's not an integer, it'll enter here.
     # We can't increment non-integers, so it'll just do a full sync.
     if ! [[ ${startval} =~ ${RE} ]]; then
-      # if --dry-run is enabled (-z)
-      if [[ "${OPTIONz}" -eq 1 ]]; then
-        echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" \
+      # configuring the full command
+      sync=(${SYNCPREFIX[@]} \
 h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
 h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
---ask-pass
+--ask-pass)
 
-      # else execute with --execute
-      else
-        echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
-h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
---ask-pass
-      fi
+      # executing full command with passwords piped in
+      echo "${SRCPASS}
+${DESTPASS}" | "${sync[@]}"
+      unset sync
 
     # Enters here when there is just the one primary key, and the values
     # are integers.
@@ -289,24 +252,17 @@ h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
         echo -e "\nSyncing ${SRCDB}.${SRCTBL} to ${DESTDB}.${DESTTBL} via \
 column '${column}' from ${x} through ${y}"
 
-        # Enters here if dry-run is enabled
-        if [[ "${OPTIONz}" -eq 1 ]]; then
-          echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
+        # configuring the full command
+        sync=(${SYNCPREFIX[@]} \
+--where "${column} >= ${x} AND ${column} <= ${y}" \
 h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
 h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
---ask-pass
+--ask-pass)
 
-        # executes with --execute when no --dry-run is set.
-        else
-          echo "${SRCPASS}
-${DESTPASS}" | ${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
---lock "${LOCK}" --where "${column} >= ${x} AND ${column} <= ${y}" \
-h="${SRCIP}",u="${SRCUSER}",P="${SRCPORT}",D="${SRCDB}",t="${SRCTBL}" \
-h="${DESTIP}",u="${DESTUSER}",P="${DESTPORT}",D="${DESTDB}",t="${DESTTBL}" \
---ask-pass
-        fi
+        # executing full command with passwords piped in
+        echo "${SRCPASS}
+${DESTPASS}" | "${sync[@]}"
+        unset sync
 
         # incrementing for the next pass-through
         x=$((x+${INC}))
@@ -874,6 +830,16 @@ the path to the 'pt-table-sync' binary with '-B /path/to/pt-table-sync'.\n\
 If not installed, it's part of Percona's 'percona-toolkit' package, which you \
 can download from their site."
     exit 1
+  fi
+
+  # Setting up the initial part of the sync command.
+  # Executes with '--dry-run' if option '-z' is called, otherwise '--execute'.
+  if [[ "${OPTIONz}" -eq 1 ]]; then
+    SYNCPREFIX=(${SYNCBIN} --dry-run --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}")
+  else
+    SYNCPREFIX=(${SYNCBIN} --execute --verbose --chunk-size "${CHUNKSIZE}" \
+--lock "${LOCK}")
   fi
 
   # if debug was specified, exit now before it executes the actual syncs
