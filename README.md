@@ -115,7 +115,7 @@ Debug complete. Exiting.
 - You would specify the MySQL binary as the full path to the **sandbox.sh** (via **-b** option)
   - The script will update the MySQL binary path to **`/full/path/sandbox.sh mysql`**.
 - Specify the path to the socket within the **data** directory to connect via the socket (which works by default).
-- If you want to connect over IP+Port, there a few configuration changes that must be made:
+- If you want to connect over IP+Port, there are a few configuration changes that must be made.
   - Within the **my.sandbox.cnf** you would uncomment **`port =`** and set it to an available port.
   - Also need to comment out **`skip-networking`**, then restart the sandbox instance.
   - From there, you should be able to connect over **127.0.0.1** (not **localhost**, assuming it's a local instance) and the port configured.
