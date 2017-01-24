@@ -2,7 +2,7 @@
 #
 # Easy Table Sync Script
 # David Andrews <andrews-d@hotmail.com>
-# Version 2.3.2
+# Version 2.3.3
 
 ################# Main Variables #################
 readonly RE='^[0-9]+$'
@@ -102,8 +102,7 @@ variable data."
 
 #################### Sync All ####################
 sync_all(){
-  for tables in $(${MYSQLBIN} -h ${SRCIP} -u ${SRCUSER} -P ${SRCPORT} \
--p${SRCPASS} ${SRCDB} -Nse "SHOW TABLES;") ; do
+  "${mysql_for[@]}" | while read tables; do
     # Setting up destination connection string
     if [[ "${OPTIONS}" -eq 1 ]]; then
       dest_cs=(S="${DESTSOCK}",h="",P="",u="${DESTUSER}",D="${DESTDB}",\
@@ -117,7 +116,7 @@ D="${DESTDB}",t="${tables}")
     if [[ "${OPTIONi}" -ne 1 && -n "${SRCSOCK}" ]]; then
       src_cs=(S="${SRCSOCK}",h="",P="",u="${SRCUSER}",D="${SRCDB}",\
 t="${tables}")
-     
+    
       # determining how many primary keys the table has.
       pkeycount=$(${MYSQLBIN} -S ${SRCSOCK} -u ${SRCUSER} -p${SRCPASS} \
 ${SRCDB} -Nse "SHOW KEYS from ${tables} where key_name='PRIMARY'"\
@@ -151,7 +150,8 @@ t="${tables}")
       # executing full command with passwords piped in
       echo "${SRCPASS}
 ${DESTPASS}" | "${sync[@]}"
-
+      echo ""
+ 
     # else, if there is just one primary key, and column is configured
     else
       # initializing variables
@@ -191,6 +191,7 @@ ${column} desc limit 1")
         # executing full command with passwords piped in
         echo "${SRCPASS}
 ${DESTPASS}" | "${sync[@]}"
+        echo ""
 
       # enters here when there is just one primary key, and it's an integer.
       else
@@ -275,6 +276,7 @@ key_name='PRIMARY'" 2>/dev/null | awk '{print $5}')
     # executing full command with passwords piped in
     echo "${SRCPASS}
 ${DESTPASS}" | "${sync[@]}"
+    echo ""
     unset sync
 
   # Enters here when there is just one primary key detected.
@@ -327,6 +329,7 @@ ${column} desc limit 1")
       # executing full command with passwords piped in
       echo "${SRCPASS}
 ${DESTPASS}" | "${sync[@]}"
+      echo ""
       unset sync
 
     # Enters here when there is just the one primary key, and the values
@@ -968,6 +971,16 @@ can download from their site."
   # calls 'sync_all' if ALL tables is specified
   elif [[ "${ALLTBLS}" -eq 1 ]]; then
     echo -e "Syncing all tables associated with ${SRCDB} to ${DESTDB}."
+
+    # Configuring the MySQL query for the while loop to show tables
+    if [[ "${OPTIONi}" -ne 1 && -n "${SRCSOCK}" ]]; then
+      mysql_for=(${MYSQLBIN} -S ${SRCSOCK} -u ${SRCUSER} -p${SRCPASS} \
+${SRCDB} -Nse SHOW\ TABLES)
+    else
+      mysql_for=(${MYSQLBIN} -h ${SRCIP} -u ${SRCUSER} -P ${SRCPORT} \
+-p${SRCPASS} ${SRCDB} -Nse SHOW\ TABLES)
+    fi
+    
     sync_all
 
   # otherwise syncs the specific table
